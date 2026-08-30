@@ -1,0 +1,122 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Email status enum
+enum EmailStatus {
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+}
+
+// Users table - stores authenticated users
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String?
+  googleId        String?   @unique
+  avatarUrl       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relationships
+  campaigns       Campaign[]
+  senders         Sender[]
+  slackConnection SlackConnection?
+  
+  @@map("users")
+}
+
+// Campaigns table - groups emails for scheduling
+model Campaign {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relationships
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails      Email[]
+  
+  @@index([userId])
+  @@map("campaigns")
+}
+
+// Senders table - email sender configurations
+model Sender {
+  id          String    @id @default(cuid())
+  name        String    // Friendly name for the sender
+  email       String    // Sender email address
+  userId      String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relationships
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails      Email[]
+  
+  @@unique([userId, email]) // One user can't have duplicate sender emails
+  @@index([userId])
+  @@map("senders")
+}
+
+// Emails table - stores scheduled/sent emails
+model Email {
+  id          String      @id @default(cuid())
+  subject     String
+  body        String      @db.Text
+  recipient   String
+  senderId    String
+  campaignId  String
+  status      EmailStatus @default(SCHEDULED)
+  scheduledAt DateTime
+  sentAt      DateTime?
+  failedAt    DateTime?
+  errorMessage String?    @db.Text
+  retryCount  Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relationships
+  sender      Sender      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  @@index([senderId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("emails")
+}
+
+// Slack connections - stores Slack OAuth data
+model SlackConnection {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  teamId          String
+  teamName        String?
+  accessToken     String    @db.Text
+  scope           String
+  botUserId       String?
+  botAccessToken  String?   @db.Text
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relationships
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@map("slack_connections")
+}
